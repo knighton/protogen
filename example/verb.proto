@@ -1,0 +1,210 @@
+package verb_proto;
+
+// Boolean that contains "either/maybe".
+enum Mool {
+  MOOL_TRUE = 0;
+  MOOL_FALSE = 1;
+  MOOL_MAYBE = 2;
+  NUM_MOOLS = 3;
+}
+
+// Abstract concept of tense (differs from surface tense).
+enum Tense {
+  TENSE_PAST = 0;
+  TENSE_PRES = 1;
+  TENSE_FUT = 2;
+  TENSE_ANY = 3;
+  NUM_TENSES = 4;
+}
+
+// Linguistic aspect.
+message Aspect {
+  required bool is_perf = 1;  // Perfective.
+  required bool is_prog = 2;  // Progressive-continuous.
+}
+
+// Modality: mood + modals.
+enum Modality {
+  MOD_INDICATIVE = 0;
+  MOD_SUBJUNCTIVE_CF = 1;
+
+  MOD_DEDUCTIVE = 2;
+  MOD_ALMOST_CERTAIN = 3;
+  MOD_PROBABLE = 4;
+  MOD_POSSIBLE = 5;
+
+  MOD_IMPERATIVE = 6;
+  MOD_SUBJUNCTIVE_IMP = 7;
+  MOD_ABILITY = 8;
+  MOD_PERMISSIVE = 9;
+  MOD_NORMATIVE = 10;
+  MOD_NECESSITY = 11;
+  NUM_MODALITIES = 12;
+}
+
+// Verb form: more granular version of finiteness.
+enum VerbForm {
+  VF_FINITE = 0;
+  VF_BARE_INF = 1;
+  VF_TO_INF = 2;
+  VF_GERUND = 3;
+  VF_SUBJLESS_GERUND = 4;
+  NUM_VERB_FORMS = 5;
+}
+
+// Everything intrinsic to a verb.  Used in deep structure.
+// Cannot be said without a bunch of context (see VerbWithContext).
+message Verb {
+  required string lemma = 1;               // I see/I like
+  required bool polarity = 2;              // I don't see/I see
+  required Mool is_polarity_contrary = 3;  // I do see/I see
+  required Tense tense = 4;                // I see/I saw
+  required Aspect aspect = 5;              // I see/I have been seeing
+  required Modality modality = 6;          // I was/I should have been
+  required bool is_cond = 8;               // I see/I would see
+  required VerbForm verb_form = 7;         // I see/me seeing
+  required bool is_pro_verb = 9;           // do you see?/do you?
+}
+
+// Linguistic voice.
+enum Voice {
+  VOICE_ACTIVE = 0;
+  VOICE_PASSIVE = 1;
+  NUM_VOICES = 2;
+}
+
+// Verb conjugation (2 numbers x 3 persons).
+enum Conjugation {
+  CONJ_S1 = 0;
+  CONJ_S2 = 1;
+  CONJ_S3 = 2;
+  CONJ_P1 = 3;
+  CONJ_P2 = 4;
+  CONJ_P3 = 5;
+  CONJ_ANY = 6;
+  NUM_CONJUGATIONS = 7;
+}
+
+enum RelativeContainment {
+  RELCONT_ZERO = 0;
+  RELCONT_WORD = 1;
+  RELCONT_NO = 2;
+  NUM_RELATIVE_CONTAINMENTS = 3;
+}
+
+// Subjunctive is dying, so allow either way.
+enum SubjunctiveHandling {
+  SH_WERE_SBJ = 0;
+  SH_WAS_SBJ = 1;
+  SH_ANY = 2;
+  NUM_SUBJUNCTIVE_HANDLINGS = 3;
+}
+
+// Everything about a verb.  Used in surface structure.
+// Parse() may leave some unknown, but say() needs all of them.
+message VerbWithContext {
+  required Verb verb = 1;          // (The verb itself)
+  required Voice voice = 2;        // I see/I am seen
+  required Conjugation conj = 3;   // I see/he sees
+  required bool is_split = 4;      // will I see/I will see
+  required RelativeContainment relative_cont = 6;
+                                   // the cat seen by/the cat that was seen by
+  required Mool contract_not = 7;  // don't you see/do you not see
+  required Mool split_inf = 9;     // to not go/not to go
+  required SubjunctiveHandling sbj_handling = 8;
+                                   // if I was/if I were
+}
+
+message TokenListPair {
+  repeated string pre_token = 1;
+  repeated string main_token = 2;
+}
+
+message SpecialTokensRequest {
+}
+
+message SpecialTokensResponse {
+  repeated string token = 1;
+}
+
+message ParseRequest {
+  required TokenListPair text = 1;
+}
+
+message ParseResponse {
+  repeated VerbWithContext verb = 1;
+}
+
+message SayRequest {
+  required VerbWithContext verb = 1;
+}
+
+message SayResponse {
+  optional TokenListPair text = 1;
+}
+
+message VerbValidityRequest {
+  required Verb verb = 1;
+  required bool for_output = 2;
+}
+
+message VerbValidityResponse {
+  required bool ok = 1;
+}
+
+message VerbWithContextValidityRequest {
+  required VerbWithContext verb = 1;
+  required bool for_output = 2;
+}
+
+message VerbWithContextValidityResponse {
+  required bool ok = 1;
+}
+
+service VerbService {
+  // (Nothing) -> list of closed-set verb words.
+  rpc GetSpecialTokens(SpecialTokensRequest) returns (SpecialTokensResponse);
+
+  // Tokens -> list of VerbWithContext.
+  rpc Parse(ParseRequest) returns (ParseResponse);
+
+  // VerbWithContext -> Tokens.
+  rpc Say(SayRequest) returns (SayResponse);
+
+  // Verb -> whether ok.
+  rpc CheckVerb(VerbValidityRequest) returns (VerbValidityResponse);
+
+  // VerbWithContext -> whether ok.
+  rpc CheckVerbWithContext(VerbWithContextValidityRequest) returns
+      (VerbWithContextValidityResponse);
+}
+
+// (pre_tokens, main_tokens) -> list of verb meanings.
+message VerbLookupTableEntry {
+  required TokenListPair text = 1;    // Last word is a stringed field index if
+                                      // in fir_table.
+  repeated VerbWithContext verb = 2;
+}
+
+// Store a mapping as a list of entries.
+message VerbLookupTable {
+  repeated VerbLookupTableEntry entry = 1;
+}
+
+// Precompute the lookup tables needed to parse verbs.
+message VerbLookupTableConfig {
+  // to_be lacks do-support, therefore its conjugations look different (includes
+  // pro-verbs of to_be).
+  required VerbLookupTable be_table = 1;
+
+  // The pro-verbs for every verb with do-support are the same.
+  required VerbLookupTable pro_verb_table = 2;
+
+  // The field index-replacing table.
+  //
+  // Everything that is not a form of to_be and/or a pro-verb contains a
+  // lemma-specific word at the end.  This is replaced by a field index of the
+  // lemma's generated verb spec.  Thus you can use the same table for all
+  // verbs.
+  required VerbLookupTable fir_table = 3;
+}
